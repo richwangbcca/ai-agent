@@ -1,7 +1,48 @@
 import os
 import requests
+from mistralai import Mistral
 
-token = os.getenv('GOOGLE_TOKEN')
+def create_maps_query(message): 
+    """
+    Given a user's message, use Mistral AI to generate a Google Maps-optimized
+    search query that aligns with what the user is looking for.
+    params:
+        - message (str): the message to generate a query from
+    returns:
+        - str: the optimized Google Maps query
+    """
+    token = os.getenv("MISTRAL_API_KEY")
+    model = "mistral-large-latest"
+    
+    prompt = """
+    Given this message, generate a search query that can be
+    used to search Google Maps for results. Provide a short answer
+    that contains only the search query.
+
+    Example:
+    Message: I'm looking for restaurants near Stanford University
+    Response: Restaurants near Stanford University
+
+    Message: I want to find somewhere to hold a kids birthday party in San Francisco
+    Response: Kids birthday party venues in San Francisco
+
+    Here is the message:
+    """ + message
+
+    client = Mistral(api_key=token)
+    chat_response = client.chat.complete(
+        model = model,
+        messages = [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+
+    return chat_response.choices[0].message.content
+
+
 
 def find_local_places(query):
     """
@@ -12,6 +53,8 @@ def find_local_places(query):
     return:
         - TODO Need to make this a good return type that will work well with Mistral
     """
+    token = os.getenv('GOOGLE_TOKEN')
+
     textsearch_url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
@@ -40,4 +83,7 @@ def find_local_places(query):
         print(f"Seems like I can't look up what's nearby (Error {response.status_code}). Let's revisit this later.")
     
 
-find_local_places('Birthday party venue near Stanford University')
+
+query = create_maps_query("I want to hold a birthday dinner in downtown Palo Alto")
+print(query)
+find_local_places(query)

@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 from mistralai import Mistral
 
@@ -28,6 +29,7 @@ def create_maps_query(message):
 
     Here is the message:
     """ + message
+    time.sleep(1)
 
     client = Mistral(api_key=token)
     chat_response = client.chat.complete(
@@ -65,7 +67,7 @@ def find_local_places(query):
     text_query = {"textQuery": query}
     
     response = requests.post(textsearch_url, headers=headers, json=text_query)
-
+    returned_places = {}
     if response.status_code == 200:
         data = response.json()
         
@@ -73,17 +75,13 @@ def find_local_places(query):
         if 'places' in data:
             print(str(len(data['places'])) + " results found")
             for place in data['places']:
-                name = place.get('displayName', {}).get('text', 'No name available')
-                address = place.get('formattedAddress', 'No address found')
-                maps_link = place.get('googleMapsLinks', {}).get('placeUri', 'about:blank')
-                print(f"Restaurant: {name}\nAddress: {address}\nLink: {maps_link}\n")
+                returned_places["name"] = place.get('displayName', {}).get('text', 'No name available')
+                returned_places["address"] = place.get('formattedAddress', 'No address found')
+                returned_places["maps_link"] = place.get('googleMapsLinks', {}).get('placeUri', 'about:blank')
+                #print(f"Restaurant: {name}\nAddress: {address}\nLink: {maps_link}\n")
         else:
-            print("I wasn't able to find any venues nearby. Do you have another query in mind?")
+            return "I wasn't able to find any venues nearby. Do you have another query in mind?"
     else:
-        print(f"Seems like I can't look up what's nearby (Error {response.status_code}). Let's revisit this later.")
-    
-
-
-query = create_maps_query("I want to hold a birthday dinner in downtown Palo Alto")
-print(query)
-find_local_places(query)
+        return "Seems like I can't look up what's nearby (Error {response.status_code}). Let's revisit this later."
+    print(returned_places)
+    return returned_places

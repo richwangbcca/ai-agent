@@ -1,15 +1,19 @@
+from collections import defaultdict, deque
 import os
 import discord
 import logging
 
 from discord.ext import commands
 from dotenv import load_dotenv
-from agent import MistralAgent
+from agent import EventPlannerAgent
 
 PREFIX = "!"
 
 # Setup logging
 logger = logging.getLogger("discord")
+
+# Setup conversation history
+conversation_history = defaultdict(lambda: deque(maxlen=10))
 
 # Load the environment variables
 load_dotenv()
@@ -20,7 +24,7 @@ intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 
 # Import the Mistral agent from the agent.py file
-agent = MistralAgent()
+agent = EventPlannerAgent()
 
 
 # Get the token from the environment variables
@@ -49,16 +53,21 @@ async def on_message(message: discord.Message):
     await bot.process_commands(message)
 
     # Ignore messages from self or other bots to prevent infinite loops.
-    if message.author.bot or message.content.startswith("!"):
-        return
+    if not (message.author.bot or message.content.startswith("!")):
+        # Process the message with the agent you wrote
+        # Open up the agent.py file to customize the agent
+        logger.info(f"Processing message from {message.author}: {message.content}")
 
-    # Process the message with the agent you wrote
-    # Open up the agent.py file to customize the agent
-    logger.info(f"Processing message from {message.author}: {message.content}")
-    response = await agent.run(message)
+        response = await agent.run(message, conversation_history[message.author.id])
+        conversation_history[message.author.id].append("User: " + str(message.content))
+        conversation_history[message.author.id].append("Me: " + str(response))
+        logger.info(f"Conversation history: {str(list(conversation_history[message.author.id]))}")
 
-    # Send the response back to the channel
-    await message.reply(response)
+
+        # Send the response back to the channel
+        await message.reply(response)
+    
+    return
 
 
 # Commands

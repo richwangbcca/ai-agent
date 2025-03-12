@@ -12,3 +12,6 @@ wheels/
 # Secrets
 .env
 tools/.gcal_api.json
+
+# Mac
+.DS_Store

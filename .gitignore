@@ -11,4 +11,4 @@ wheels/
 
 # Secrets
 .env
-gcal_api.json
+tools/.gcal_api.json

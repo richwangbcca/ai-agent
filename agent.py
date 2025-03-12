@@ -5,36 +5,36 @@ import discord
 
 import tools.gmaps as gmaps
 import tools.eventmgmt as eventmgmt
+from tools.gcal import GoogleCalendar
 
 MISTRAL_MODEL = "mistral-large-latest"
 
 PROMPT_1 = """
-You are a helpful and friendly event planner. 
-You will keep the process concise but effective. Be sure to acknowledge any changes that the user makes to the event,
-and update the event accordingly. Every once in a while, remind the user what they have planned already.
-You will help them plan the theme, design invitations, manage budgets, organize logistics, and plan decorations. 
-If the user asks for suggestions, you may provide them, but keep the conversation focused on planning the overall event.
-You have tools that help to search Google Maps for locations. Use the tool if the user asks for venue suggestions, and do
-not provide your own suggestions. Immediately return results from the tool. Make sure to ask for a specific location for a
-venue; do not assume their general location.
+You are a helpful and friendly event planner. Keep the process concise but effective. 
+Acknowledge and update any changes the user makes. Remind them of what they have planned so far if a reminder is not seen in the
+conversation history, sharing the information in a readable and human-friendly
+format. Let the user know if there are any potential issues with the event, such as timing or an unreasonable budget.
 
-Example:
-User: "I want to plan a birthday dinner. Can you provide some restaurant suggestions near Stanford University?"
-Response: "Here are some restaurant suggestions near Stanford University: [INSERT GOOGLE MAPS RESULTS]"
+You assist with: 
+- Theme & decorations
+- Invitations & logistics
+- Budget management
 
-You have another tool that scans the conversation history to identify event details to update the event with. Use this tool whenever an
-event detail is decided upon.
+Tools:
+- Venue search: Use Google Maps to find venues based on user requests. Do not provide venue suggestions yourself. Ask for a specific location before searching. Do
+not respond to the user until the search is complete. Do not tell the user to wait. Provide the Google Maps results immediately in your response. Share the
+venue name, address, and short description.
+- Conversation scanner: Detects event details as they are decided.
+- Google Calendar integration: Once all details are confirmed, create and share an "add to calendar" link. Do not edit this link in any way when you share it
+with the user.
 
-The following is the previously decided upon entries of the event. You should ultimately address and fill in all of these fields before 
-summarizing and creating the event. If all fields are empty, then this is a new event and no details have been decided upon.
+Event Details:
+If this is a new event, remind the user of your capabilities. Required fields: Title, Date, Time. Assist in filling in other details before finalizing the event. 
 """
 
 PROMPT_2 = """
-The following are the last ten messages sent by the user.
+The following are the last 5 messages sent between you and the user.
 """
-
-
-
 
 class EventPlannerAgent:
     def __init__(self):
@@ -93,12 +93,21 @@ class EventPlannerAgent:
                         }
                     }
                 }
+            },
+
+            {
+                "type": "function",
+                "function": {
+                    "name": "create_gcal_event",
+                    "description": "Generate an \"add to calendar\" link to a Google Calendar event, given a title and a date and time"
+                }
             }
         ]
         self.tools_to_functions = {
             "find_local_places": gmaps.find_local_places,
             "create_maps_query": gmaps.create_maps_query,
-            "extract_event_data": self.update_details
+            "extract_event_data": self.update_details,
+            "create_gcal_event": self.create_gcal_event
         }
 
         self.event_details = {
@@ -138,4 +147,12 @@ class EventPlannerAgent:
     def update_details(self, conversation_history: deque):
         updated_dict = eventmgmt.extract_event_data(conversation_history, self.event_details)
         self.event_details.update(updated_dict)
+
+    def create_gcal_event(self):
+        gcal_details = {}
+        gcal_details["date"] = self.event_details["date"]
+        gcal_details["time"] = self.event_details["time"]
+
+        gcal_client = GoogleCalendar()
+        return gcal_client.create_event(gcal_details)
 

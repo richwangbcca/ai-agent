@@ -9,7 +9,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 # Google Calendar API setup
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 TOKEN_FILE = "token.json"
-CREDENTIALS_FILE = "gcal_api.json"  # Make sure this is the correct path
+CREDENTIALS_FILE = ".gcal_api.json"  # Make sure this is the correct path
 
 class GoogleCalendar:
     def __init__(self):
@@ -97,9 +97,11 @@ class GoogleCalendar:
                     "dateTime": end_datetime.isoformat(),
                     "timeZone": "America/Los_Angeles",
                 },
+                "visibility": "public"
             }
 
             created_event = self.service.events().insert(calendarId="primary", body=event).execute()
+            print(created_event["htmlLink"])
             return created_event["htmlLink"]
 
         except Exception as e:

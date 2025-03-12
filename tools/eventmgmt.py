@@ -5,7 +5,11 @@ def extract_event_data(conversation_history, event_details):
     """
     Extract event data from the conversation history between the bot and
     the user, and update the event_details accordingly.
-    
+    params:
+        - conversation_history (deque): last five messages between the user and the bot
+        - event_details (dict): the currently decided upon event details
+    returns:
+        - dict: the updated event details
     """
     token = os.getenv("MISTRAL_API_KEY")
     model = "mistral-large-latest"

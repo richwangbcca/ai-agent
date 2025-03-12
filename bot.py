@@ -13,7 +13,7 @@ PREFIX = "!"
 logger = logging.getLogger("discord")
 
 # Setup conversation history
-conversation_history = defaultdict(lambda: deque(maxlen=10))
+conversation_history = defaultdict(lambda: deque(maxlen=5))
 
 # Load the environment variables
 load_dotenv()
@@ -68,21 +68,6 @@ async def on_message(message: discord.Message):
         await message.reply(response)
     
     return
-
-
-# Commands
-
-
-# This example command is here to show you how to add commands to the bot.
-# Run !ping with any number of arguments to see the command in action.
-# Feel free to delete this if your project will not need commands.
-@bot.command(name="ping", help="Pings the bot.")
-async def ping(ctx, *, arg=None):
-    if arg is None:
-        await ctx.send("Pong!")
-    else:
-        await ctx.send(f"Pong! Your argument was {arg}")
-
 
 # Start the bot, connecting it to the gateway
 bot.run(token)

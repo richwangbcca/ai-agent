@@ -3,7 +3,10 @@ import time
 import requests
 from mistralai import Mistral
 
-def create_maps_query(message): 
+TOKEN = os.getenv("MISTRAL_API_KEY")
+MODEL = "mistral-large-latest"
+
+def create_maps_query(conversation_history): 
     """
     Given a user's message, use Mistral AI to generate a Google Maps-optimized
     search query that aligns with what the user is looking for.
@@ -12,13 +15,12 @@ def create_maps_query(message):
     returns:
         - str: the optimized Google Maps query
     """
-    token = os.getenv("MISTRAL_API_KEY")
-    model = "mistral-large-latest"
     
     prompt = """
     Given this message, generate a search query that can be
     used to search Google Maps for results. Provide a short answer
-    that contains only the search query.
+    that contains only the search query. If the message is not relevant
+    to searching for a venue, return an empty string.
 
     Example:
     Message: I'm looking for restaurants near Stanford University
@@ -28,12 +30,12 @@ def create_maps_query(message):
     Response: Kids birthday party venues in San Francisco
 
     Here is the message:
-    """ + message
+    """ + str(conversation_history)
     time.sleep(1)
 
-    client = Mistral(api_key=token)
+    client = Mistral(api_key=TOKEN)
     chat_response = client.chat.complete(
-        model = model,
+        model = MODEL,
         messages = [
             {
                 "role": "user",
@@ -67,7 +69,7 @@ def find_local_places(query):
     text_query = {"textQuery": query}
     
     response = requests.post(textsearch_url, headers=headers, json=text_query)
-    returned_places = {}
+    return_string = ""
     if response.status_code == 200:
         data = response.json()
         
@@ -75,13 +77,14 @@ def find_local_places(query):
         if 'places' in data:
             print(str(len(data['places'])) + " results found")
             for place in data['places']:
-                returned_places["name"] = place.get('displayName', {}).get('text', 'No name available')
-                returned_places["address"] = place.get('formattedAddress', 'No address found')
-                returned_places["maps_link"] = place.get('googleMapsLinks', {}).get('placeUri', 'about:blank')
-                #print(f"Restaurant: {name}\nAddress: {address}\nLink: {maps_link}\n")
+                name = place.get('displayName', {}).get('text', 'No name available')
+                address = place.get('formattedAddress', 'No address found')
+                link = place.get('googleMapsLinks', {}).get('placeUri', 'about:blank')
+                return_string += f"Restaurant: {name}\nAddress: {address}\nLink: {link}\n\n"
         else:
             return "I wasn't able to find any venues nearby. Do you have another query in mind?"
     else:
         return "Seems like I can't look up what's nearby (Error {response.status_code}). Let's revisit this later."
-    print(returned_places)
-    return returned_places
+    
+    print(return_string)
+    return return_string

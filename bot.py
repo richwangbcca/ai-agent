@@ -2,6 +2,7 @@ from collections import defaultdict, deque
 import os
 import discord
 import logging
+import asyncio
 
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -57,17 +58,18 @@ async def on_message(message: discord.Message):
         # Process the message with the agent you wrote
         # Open up the agent.py file to customize the agent
         logger.info(f"Processing message from {message.author}: {message.content}")
-
-        response = await agent.run(message, conversation_history[message.author.id])
+        response = await agent.run(message, list(conversation_history[message.author.id]))
         conversation_history[message.author.id].append("User: " + str(message.content))
         conversation_history[message.author.id].append("Me: " + str(response))
-        logger.info(f"Conversation history: {str(list(conversation_history[message.author.id]))}")
-
 
         # Send the response back to the channel
-        await message.reply(response)
+        message_chunks = split_message(response)
+        for chunk in message_chunks:
+            await message.reply(chunk)
     
     return
 
+def split_message(message, max_length=2000):
+    return [message[i:i+max_length] for i in range(0, len(message), max_length)]
 # Start the bot, connecting it to the gateway
 bot.run(token)

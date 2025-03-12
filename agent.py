@@ -2,6 +2,10 @@ import os
 from collections import deque
 from mistralai import Mistral
 import discord
+import logging
+import json
+
+import asyncio
 
 import tools.gmaps as gmaps
 import tools.eventmgmt as eventmgmt
@@ -11,9 +15,11 @@ MISTRAL_MODEL = "mistral-large-latest"
 
 PROMPT_1 = """
 You are a helpful and friendly event planner. Keep the process concise but effective. 
-Acknowledge and update any changes the user makes. Remind them of what they have planned so far if a reminder is not seen in the
-conversation history, sharing the information in a readable and human-friendly
-format. Let the user know if there are any potential issues with the event, such as timing or an unreasonable budget.
+Acknowledge and update any changes the user makes. Remind them of what they have planned so far every time a new detail is determined,
+sharing the information in a readable and conversational format. When the user deems the event finalized, create a Google Calendar event
+for them immediately. Do not share fields that have not been determined yet. Let the user know if there are any potential issues with the event, such 
+as timing or an unreasonable budget. Prioritize the use of the search_maps tool for venue suggestions, and create the Google Calendar event 
+as soon as everything is finalized without being prompted. When looking up suggestions, do not 
 
 You assist with: 
 - Theme & decorations
@@ -21,20 +27,25 @@ You assist with:
 - Budget management
 
 Tools:
-- Venue search: Use Google Maps to find venues based on user requests. Do not provide venue suggestions yourself. Ask for a specific location before searching. Do
-not respond to the user until the search is complete. Do not tell the user to wait. Provide the Google Maps results immediately in your response. Share the
-venue name, address, and short description.
-- Conversation scanner: Detects event details as they are decided.
-- Google Calendar integration: Once all details are confirmed, create and share an "add to calendar" link. Do not edit this link in any way when you share it
-with the user.
+- search_maps: Use Google Maps to find venues based on user requests. If a user requests venue suggestions, IMMEDIATELY call the search_maps
+tool. Do NOT attempt to answer the request yourself. If no location is given, first ask for one, then call the tool. Do not tell the user to wait. Provide 
+the Google Maps results immediately in your response. Share the venue name, address, and short description, ensuring that the provided information matches 
+exactly the Google Maps results. 
+- create_gcal_event: Once all details are confirmed, create and share an "add to calendar" link. Do not edit this link in any way when you share it
+with the user. Do not tell them to wait. Provide the link immediately in your response in this format:
+Here is your "add to calendar" link: [link]
 
 Event Details:
-If this is a new event, remind the user of your capabilities. Required fields: Title, Date, Time. Assist in filling in other details before finalizing the event. 
+If this is a new event, remind the user of your capabilities. Required fields: Title, Date, Time. These should be prioritized. Assist in filling in other 
+details before finalizing the event. 
 """
 
 PROMPT_2 = """
 The following are the last 5 messages sent between you and the user.
 """
+
+
+logger = logging.getLogger("discord")
 
 class EventPlannerAgent:
     def __init__(self):
@@ -45,32 +56,14 @@ class EventPlannerAgent:
             {
                 "type": "function",
                 "function": {
-                    "name": "find_local_places",
-                    "description": "Search a query on Google Maps. Returns a dictionary that contains venue details",
+                    "name": "search_maps",
+                    "description": "Search Google Maps for venue locations based on conversation history",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "The query to search on Google Maps",
-                            }
-                        },
-                        "required": ["query"]
-                    }
-                }
-            },
-
-            {
-                "type": "function",
-                "function": {
-                    "name": "create_maps_query",
-                    "description": "Generate a search query optimized for Google Maps",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "message": {
-                                "type": "string",
-                                "description": "The message to generate a Google Maps query from"
+                            "conversation_history": {
+                                "type": "array",
+                                "description": "Last five messages between the user and the bot",
                             }
                         },
                         "required": ["message"]
@@ -81,32 +74,36 @@ class EventPlannerAgent:
             {
                 "type": "function",
                 "function": {
-                    "name": "extract_event_data",
-                    "description": "Automatically extract event data from conversation history and update the event details JSON",
+                    "name": "create_gcal_event",
+                    "description": "Generate an \"add to calendar\" link to a Google Calendar event, given a title and a date and time",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "conversation_history": {
-                                "type": "deque",
-                                "description": "Contains the conversation history between the user and the bot"
+                            "title": {
+                                "type": "string",
+                                "description": "The title of the event"
                             },
-                        }
+                            "date": {
+                                "type": "string",
+                                "description": "The date of the event"
+                            },
+                            "time": {
+                                "type": "string",
+                                "description": "The time of the event"
+                            },
+                            "location": {
+                                "type": "string",
+                                "description": "The location of the event"
+                            }
+                        },
+                        "required": ["title", "date", "time"]
                     }
-                }
-            },
-
-            {
-                "type": "function",
-                "function": {
-                    "name": "create_gcal_event",
-                    "description": "Generate an \"add to calendar\" link to a Google Calendar event, given a title and a date and time"
                 }
             }
         ]
+
         self.tools_to_functions = {
-            "find_local_places": gmaps.find_local_places,
-            "create_maps_query": gmaps.create_maps_query,
-            "extract_event_data": self.update_details,
+            "search_maps": self.search_maps,
             "create_gcal_event": self.create_gcal_event
         }
 
@@ -132,27 +129,52 @@ class EventPlannerAgent:
         }
 
     async def run(self, message: discord.Message, conversation_history: deque):
+        message_content = message.content
         prompt = PROMPT_1 + str(self.event_details) + PROMPT_2 + str(list(conversation_history))
         messages = [
             {"role": "system", "content": prompt},
-            {"role": "user", "content": message.content},
+            {"role": "user", "content": message_content},
         ]
+
+        tool_response = await self.client.chat.complete_async(
+            model=MISTRAL_MODEL,
+            messages=messages,
+            tools = self.tools,
+            tool_choice = "auto"
+        )
+
+        if tool_response.choices[0].message.tool_calls:
+            tool_calls = tool_response.choices[0].message.tool_calls
+            for tool_call in tool_calls:
+                function_name = tool_call.function.name
+                function_params = json.loads(tool_call.function.arguments)
+
+                # Call the mapped function and account for default parameters
+                function_result = self.tools_to_functions[function_name](**function_params)
+                messages.append({"role": "user", "content": f"Result of {function_name}: {function_result}"})
+        
+        await asyncio.sleep(3)
         response = await self.client.chat.complete_async(
             model=MISTRAL_MODEL,
             messages=messages,
         )
-
         return response.choices[0].message.content
     
-    def update_details(self, conversation_history: deque):
-        updated_dict = eventmgmt.extract_event_data(conversation_history, self.event_details)
-        self.event_details.update(updated_dict)
+    def search_maps(self, conversation_history: list):
+        logger.info("Running search_maps")
+        query = gmaps.create_maps_query(conversation_history)
+        results = gmaps.find_local_places(query)
+        return results
 
-    def create_gcal_event(self):
+    def create_gcal_event(self, title: str, date: str, time: str, location: str = ""):
+        logger.info("Running create_gcal_event")
         gcal_details = {}
-        gcal_details["date"] = self.event_details["date"]
-        gcal_details["time"] = self.event_details["time"]
+        gcal_details["title"] = title
+        gcal_details["date"] = date
+        gcal_details["time"] = time
+        if location != "":
+            gcal_details["location"] = location
 
-        gcal_client = GoogleCalendar()
-        return gcal_client.create_event(gcal_details)
+        #gcal_client = GoogleCalendar()
+        return ""#gcal_client.create_event(gcal_details)
 

@@ -9,8 +9,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 # Google Calendar API setup
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 TOKEN_FILE = "token.json"
-CREDENTIALS_FILE = ".gcal_api.json"  # Make sure this is the correct path
-
+CREDENTIALS_FILE = "tools/.gcal_api.json"  # Make sure this is the correct path
 class GoogleCalendar:
     def __init__(self):
         """Initialize the Google Calendar service."""
@@ -86,7 +85,7 @@ class GoogleCalendar:
 
             # Step 6: Create Google Calendar Event
             event = {
-                "summary": event_details["occasion"],
+                "summary": event_details["title"],
                 "location": event_details["location"] if event_details["location"] != "none" else "TBD",
                 "description": f"Theme: {event_details['theme']}" if event_details["theme"] != "none" else "No theme specified",
                 "start": {

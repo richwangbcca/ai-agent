@@ -2,11 +2,12 @@ from collections import defaultdict, deque
 import os
 import discord
 import logging
-import asyncio
 
 from discord.ext import commands
 from dotenv import load_dotenv
+
 from agent import EventPlannerAgent
+from help import CustomHelpCommand
 
 PREFIX = "!"
 
@@ -20,17 +21,14 @@ conversation_history = defaultdict(lambda: deque(maxlen=5))
 load_dotenv()
 
 # Create the bot with all intents
-# The message content and members intent must be enabled in the Discord Developer Portal for the bot to work.
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix=PREFIX, intents=intents)
+bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=CustomHelpCommand())
 
 # Import the Mistral agent from the agent.py file
 agent = EventPlannerAgent()
 
-
 # Get the token from the environment variables
 token = os.getenv("DISCORD_TOKEN")
-
 
 @bot.event
 async def on_ready():
@@ -41,6 +39,7 @@ async def on_ready():
     https://discordpy.readthedocs.io/en/latest/api.html#discord.on_ready
     """
     logger.info(f"{bot.user} has connected to Discord!")
+    await load_cogs() #TODO: change this to setup_hook
 
 
 @bot.event
@@ -50,13 +49,10 @@ async def on_message(message: discord.Message):
 
     https://discordpy.readthedocs.io/en/latest/api.html#discord.on_message
     """
-    # Don't delete this line! It's necessary for the bot to process commands.
     await bot.process_commands(message)
 
     # Ignore messages from self or other bots to prevent infinite loops.
     if not (message.author.bot or message.content.startswith("!")):
-        # Process the message with the agent you wrote
-        # Open up the agent.py file to customize the agent
         logger.info(f"Processing message from {message.author}: {message.content}")
         response = await agent.run(message, list(conversation_history[message.author.id]))
         conversation_history[message.author.id].append("User: " + str(message.content))
@@ -69,7 +65,13 @@ async def on_message(message: discord.Message):
     
     return
 
+
 def split_message(message, max_length=2000):
     return [message[i:i+max_length] for i in range(0, len(message), max_length)]
+
+async def load_cogs():
+    await bot.load_extension("cogs.general")
+    await bot.load_extension("cogs.event_mgmt")
+
 # Start the bot, connecting it to the gateway
 bot.run(token)

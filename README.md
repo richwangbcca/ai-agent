@@ -7,7 +7,7 @@ This was built as the final project for Stanford's CS153: Infrastructure at Scal
 <p align="center"><img width="530" height="440" alt="Screenshot of EventBot" src="https://github.com/user-attachments/assets/3111931d-08e3-47b7-88ac-315de4066492" /></p>
 
 ## Features
-- Suggests venues based on group preferences using the Google Maps API
+- Suggests venues based on user preferences using the Google Maps API
 - Creates shareable Google Calendar invites via the Google Calendar API
 - Responds to natural language prompts in Discord using the Mistral API
 - Maintains short-term planning context via in-memory conversation history

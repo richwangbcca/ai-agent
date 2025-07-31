@@ -15,8 +15,7 @@ This was built as the final project for Stanford's CS153: Infrastructure at Scal
 ## Limitations
 This project was built without LangChain, AutoGen, or other agent frameworks. The LLM agent is manually managed, relying on a linear conversation model stored in Python lists. Some known issues:
 - No long-term memory or true function chaining
-- Occasional event parsing errors under ambiguous input
-- Hard-coded logic paths; brittle to phrasing variations
+- Brittle function calling reliability
 - Rate limits and API keys are not production-hardened
 
 ## Tech Stack
